@@ -1,0 +1,88 @@
+RANDOM FOREST CLASSIFIER RESULTS
+======================================================================
+
+BASELINE RANDOM FOREST
+----------------------------------------------------------------------
+Accuracy:  0.9450
+Precision: 0.9497
+Recall:    0.9450
+F1-score:  0.9462
+
+FINAL TUNED RANDOM FOREST
+----------------------------------------------------------------------
+Accuracy:  0.9856
+Precision: 0.9857
+Recall:    0.9856
+F1-score:  0.9856
+
+BEST RANDOMIZEDSEARCHCV SCORE
+----------------------------------------------------------------------
+Mean CV Accuracy: 0.9605
+
+BEST RANDOMIZEDSEARCHCV PARAMETERS
+----------------------------------------------------------------------
+classifier__n_estimators: 300
+classifier__min_samples_split: 2
+classifier__min_samples_leaf: 1
+classifier__max_features: None
+classifier__max_depth: 20
+classifier__criterion: entropy
+
+
+INDIVIDUAL PARAMETER ANALYSIS
+======================================================================
+
+n_estimators
+100: 0.9323
+200: 0.9353
+300: 0.9413
+500: 0.9389
+700: 0.9377
+1000: 0.9383
+
+max_depth
+10: 0.9317
+20: 0.9323
+30: 0.9323
+50: 0.9323
+75: 0.9323
+100: 0.9323
+
+max_features
+sqrt: 0.9323
+log2: 0.9269
+None: 0.9503
+
+criterion
+gini: 0.9323
+entropy: 0.9335
+log_loss: 0.9335
+
+min_samples_split
+2: 0.9323
+5: 0.9305
+10: 0.9257
+15: 0.9197
+
+min_samples_leaf
+1: 0.9323
+2: 0.9293
+4: 0.9197
+8: 0.8981
+
+
+CLASSIFICATION REPORT
+======================================================================
+                     precision    recall  f1-score   support
+
+Insufficient_Weight       1.00      1.00      1.00        53
+      Normal_Weight       0.98      0.96      0.97        57
+     Obesity_Type_I       0.99      1.00      0.99        70
+    Obesity_Type_II       1.00      1.00      1.00        60
+   Obesity_Type_III       1.00      0.98      0.99        65
+ Overweight_Level_I       0.96      0.95      0.95        55
+Overweight_Level_II       0.97      1.00      0.98        58
+
+           accuracy                           0.99       418
+          macro avg       0.99      0.98      0.99       418
+       weighted avg       0.99      0.99      0.99       418
