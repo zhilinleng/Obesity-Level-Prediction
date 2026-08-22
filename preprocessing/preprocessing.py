@@ -5,7 +5,7 @@ import seaborn as sns
 
 from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelEncoder
 
 
 # ============================================================
@@ -146,7 +146,12 @@ def prepare_data(df):
 
     # Separate features and target
     X = df.drop("NObeyesdad", axis=1)
-    y = df["NObeyesdad"]
+    y_raw = df["NObeyesdad"]
+
+    # 1. Label Encode the Target Variable (Required by docs)
+    target_encoder = LabelEncoder()
+    y_encoded = target_encoder.fit_transform(y_raw)
+    y = pd.Series(y_encoded, name="NObeyesdad")
 
     # Identify categorical features
     categorical_features = X.select_dtypes(
@@ -170,18 +175,26 @@ def prepare_data(df):
     for feature in numerical_features:
         print(f"- {feature}")
 
-    # One-Hot Encoding
+    print("\nClasses after Label Encoding:")
+    print(list(target_encoder.classes_))
+
+    # 2. One-Hot Encoding AND StandardScaler (Required by docs)
     preprocessor = ColumnTransformer(
         transformers=[
             (
                 "categorical",
                 OneHotEncoder(
-                    handle_unknown="ignore"
+                    handle_unknown="ignore", 
+                    drop="if_binary"
                 ),
                 categorical_features
+            ),
+            (
+                "numerical",
+                StandardScaler(),
+                numerical_features
             )
-        ],
-        remainder="passthrough"
+        ]
     )
 
     return X, y, preprocessor
@@ -234,6 +247,8 @@ def preprocess_data():
 
     explore_data(df)
 
+    # Note: Your group's PDF did not mention removing duplicates, 
+    # but I am leaving this here since your team wrote it into the script.
     df = remove_duplicates(df)
 
     create_class_distribution_graph(df)
