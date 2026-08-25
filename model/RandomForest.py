@@ -5,17 +5,13 @@ Evaluates the model and exports the .pkl files for GUI integration.
 """
 
 import os
-import joblib
 import time
+import joblib
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.tree import plot_tree
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder, StandardScaler
-from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -23,13 +19,25 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay,
     roc_auc_score,
 )
-from sklearn.ensemble import RandomForestClassifier
+
+# 1. IMPORT EVERYTHING FROM YOUR PREPROCESSING FILE
+from preprocessing.preprocessing import (
+    X_train, 
+    X_test, 
+    y_train, 
+    y_test, 
+    preprocessor,
+    binary_cols, 
+    ordinal_cols, 
+    nominal_cols, 
+    numeric_cols
+)
 
 start_time = time.time()
 RANDOM_STATE = 42
 
 # --------------------------------------------------------------------------
-# BEST HYPERPARAMETERS (Copy these from your tuning results text file)
+# 2. BEST HYPERPARAMETERS
 # --------------------------------------------------------------------------
 BEST_PARAMS = {
     "n_estimators": 300,
@@ -41,41 +49,36 @@ BEST_PARAMS = {
 }
 
 # --------------------------------------------------------------------------
-# 1. LOAD DATA
+# SEVERITY-ORDERED TARGET ENCODER
 # --------------------------------------------------------------------------
-def load_data():
-    data_path = "data/ObesityDataSet_raw_and_data_sinthetic.csv" 
-    df = pd.read_csv(data_path)
-    y = df["NObeyesdad"]
-    X = df.drop(columns=["NObeyesdad"])
-    return X, y
+SEVERITY_ORDER = [
+    "Insufficient_Weight",
+    "Normal_Weight",
+    "Overweight_Level_I",
+    "Overweight_Level_II",
+    "Obesity_Type_I",
+    "Obesity_Type_II",
+    "Obesity_Type_III",
+]
 
-X, y = load_data()
+class SeverityOrderedTargetEncoder:
+    """Encodes the target in explicit obesity-severity order."""
+    def __init__(self, categories):
+        self.classes_ = np.array(categories)
+        self._to_code = {c: i for i, c in enumerate(categories)}
+        self._to_label = {i: c for i, c in enumerate(categories)}
 
-# --------------------------------------------------------------------------
-# 2. STRICT PREPROCESSING (As defined in your documentation)
-# --------------------------------------------------------------------------
-binary_cols = ["Gender", "family_history_with_overweight", "FAVC", "SMOKE", "SCC"]
-nominal_cols = ["CAEC", "CALC", "MTRANS"]          
-numeric_cols = ["Age", "Height", "Weight", "FCVC", "NCP", "CH2O", "FAF", "TUE"]
-categorical_cols = binary_cols + nominal_cols
+    def fit_transform(self, y):
+        return np.array([self._to_code[v] for v in y])
 
-# Encode target labels (7 obesity classes -> integers)
-target_encoder = LabelEncoder()
-y_encoded = target_encoder.fit_transform(y)
+    def transform(self, y):
+        return np.array([self._to_code[v] for v in y])
 
-# ColumnTransformer: one-hot encode categoricals, standardscaler for numeric
-preprocessor = ColumnTransformer(
-    transformers=[
-        ("cat", OneHotEncoder(handle_unknown="ignore", drop="if_binary"), categorical_cols),
-        ("num", StandardScaler(), numeric_cols),
-    ]
-)
+    def inverse_transform(self, y):
+        return np.array([self._to_label[int(i)] for i in y])
 
-# Train/test split (stratified)
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y_encoded, test_size=0.2, random_state=RANDOM_STATE, stratify=y_encoded
-)
+# Initialize the encoder for the graphs and .pkl export
+target_encoder = SeverityOrderedTargetEncoder(SEVERITY_ORDER)
 
 # --------------------------------------------------------------------------
 # 3. FIT RANDOM FOREST WITH BEST HYPERPARAMETERS
@@ -126,14 +129,21 @@ plt.savefig("results/graphs/rf_confusion_matrix.png", dpi=150)
 plt.close()
 
 # ==========================================================================
-# 4.5. SAMPLE DECISION TREE GRAPH (ADD THIS NEW SECTION HERE)
+# 4.5. SAMPLE DECISION TREE GRAPH
 # ==========================================================================
 print("\nGenerating sample decision tree graph...")
 
-# 1. Recover feature names after one-hot encoding
-ohe = best_model.named_steps["preprocessor"].named_transformers_["cat"]
-ohe_feature_names = list(ohe.get_feature_names_out(categorical_cols))
-all_feature_names = ohe_feature_names + numeric_cols
+# 1. Recover feature names from the new ColumnTransformer structure
+# Binary and Ordinal columns keep their original names
+bin_feature_names = binary_cols
+ord_feature_names = ordinal_cols
+
+# Nominal columns get expanded by OneHotEncoder
+nom_ohe = best_model.named_steps["preprocessor"].named_transformers_["nom"]
+nom_feature_names = list(nom_ohe.get_feature_names_out(nominal_cols))
+
+# Combine all names in the EXACT order they appear in the ColumnTransformer
+all_feature_names = bin_feature_names + ord_feature_names + nom_feature_names + numeric_cols
 
 # 2. Extract the very first decision tree (index 0) from the 300 tuned trees
 sample_tree = best_model.named_steps["classifier"].estimators_[0]

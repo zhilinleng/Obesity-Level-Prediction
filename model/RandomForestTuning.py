@@ -43,7 +43,7 @@ def tqdm_joblib(tqdm_object):
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from preprocessing.preprocessing import preprocess_data
+from preprocessing.preprocessing import X_train, X_test, y_train, y_test, preprocessor
 
 GRAPH_PATH = os.path.join(PROJECT_ROOT, "results", "graphs")
 RESULT_FILE = os.path.join(PROJECT_ROOT, "results", "random_forest_tuning_results.txt")
@@ -53,7 +53,6 @@ os.makedirs(GRAPH_PATH, exist_ok=True)
 # 1. LOAD DATA
 # ============================================================
 print("Loading and preprocessing data for tuning...")
-(X_train, X_test, y_train, y_test, preprocessor) = preprocess_data()
 
 # ============================================================
 # 2. SETUP PIPELINE & TUNING PARAMETERS
