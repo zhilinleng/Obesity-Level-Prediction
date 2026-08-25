@@ -7,6 +7,7 @@ and saving both the best parameters and all individual parameter results to a te
 import os
 import sys
 import contextlib
+import time
 import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -15,6 +16,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 
+start_time = time.time()
 # ============================================================
 # PROGRESS BAR HELPER
 # ============================================================
@@ -87,8 +89,7 @@ random_search = RandomizedSearchCV(
 # ============================================================
 # 3. RUN TUNING WITH PROGRESS BAR
 # ============================================================
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
+os.environ["PYTHONWARNINGS"] = "ignore"
 
 print("\nStarting hyperparameter tuning...")
 total_fits = random_search.n_iter * random_search.cv.n_splits
@@ -185,3 +186,11 @@ for param_col, param_title in parameters_to_plot.items():
     plt.close()
 
 print("\nProcess Complete! Check the 'results' folder.")
+
+# ============================================================
+# 6. RUNNING TIME
+# ============================================================
+end_time = time.time()
+elapsed_time = end_time - start_time
+minutes, seconds = divmod(elapsed_time, 60)
+print(f"Total Tuning Execution Time: {int(minutes)} minutes and {seconds:.2f} seconds\n")

@@ -6,6 +6,7 @@ Evaluates the model and exports the .pkl files for GUI integration.
 
 import os
 import joblib
+import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -24,6 +25,7 @@ from sklearn.metrics import (
 )
 from sklearn.ensemble import RandomForestClassifier
 
+start_time = time.time()
 RANDOM_STATE = 42
 
 # --------------------------------------------------------------------------
@@ -163,3 +165,10 @@ joblib.dump(best_model, "saved_model/random_forest_model.pkl")
 joblib.dump(target_encoder, "saved_model/rf_target_encoder.pkl")
 print("\nSaved trained pipeline to saved_model/random_forest_model.pkl")
 print("Saved target label encoder to saved_model/rf_target_encoder.pkl")
+
+# ==========================================================================
+# 6. RUNNING TIME
+# ==========================================================================
+end_time = time.time()
+elapsed_time = end_time - start_time
+print(f"\nTotal Execution Time: {elapsed_time:.2f} seconds")
