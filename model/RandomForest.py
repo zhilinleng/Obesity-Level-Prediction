@@ -5,13 +5,16 @@ Evaluates the model and exports the .pkl files for GUI integration.
 """
 
 import os
-import time
 import joblib
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.tree import plot_tree
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -19,25 +22,12 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay,
     roc_auc_score,
 )
+from sklearn.ensemble import RandomForestClassifier
 
-# 1. IMPORT EVERYTHING FROM YOUR PREPROCESSING FILE
-from preprocessing.preprocessing import (
-    X_train, 
-    X_test, 
-    y_train, 
-    y_test, 
-    preprocessor,
-    binary_cols, 
-    ordinal_cols, 
-    nominal_cols, 
-    numeric_cols
-)
-
-start_time = time.time()
 RANDOM_STATE = 42
 
 # --------------------------------------------------------------------------
-# 2. BEST HYPERPARAMETERS
+# BEST HYPERPARAMETERS (Copy these from your tuning results text file)
 # --------------------------------------------------------------------------
 BEST_PARAMS = {
     "n_estimators": 300,
@@ -51,6 +41,13 @@ BEST_PARAMS = {
 # --------------------------------------------------------------------------
 # SEVERITY-ORDERED TARGET ENCODER
 # --------------------------------------------------------------------------
+# LabelEncoder sorts classes alphabetically, which puts Obesity types before
+# Overweight levels — medically wrong ordering. SeverityOrderedTargetEncoder
+# forces the correct low-to-high severity sequence, matching LogisticRegression.py
+# and XGBoost.py (which already uses severity order via its manual mapping).
+# Tree-based models don't use label order for splitting, so accuracy is
+# unaffected — only the class labels in the report/confusion matrix change
+# from alphabetical to severity order, consistent across all three scripts.
 SEVERITY_ORDER = [
     "Insufficient_Weight",
     "Normal_Weight",
@@ -62,7 +59,11 @@ SEVERITY_ORDER = [
 ]
 
 class SeverityOrderedTargetEncoder:
-    """Encodes the target in explicit obesity-severity order."""
+    """Encodes the target in explicit obesity-severity order rather than
+    alphabetically. Exposes the same .classes_ / .fit_transform() /
+    .inverse_transform() interface as LabelEncoder so nothing else in
+    the script needs to change."""
+
     def __init__(self, categories):
         self.classes_ = np.array(categories)
         self._to_code = {c: i for i, c in enumerate(categories)}
@@ -77,9 +78,104 @@ class SeverityOrderedTargetEncoder:
     def inverse_transform(self, y):
         return np.array([self._to_label[int(i)] for i in y])
 
-# Initialize the encoder for the graphs and .pkl export
-target_encoder = SeverityOrderedTargetEncoder(SEVERITY_ORDER)
 
+import numpy as np
+from sklearn.compose import ColumnTransformer
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder, OrdinalEncoder, StandardScaler
+
+
+RANDOM_STATE = 42
+
+# --------------------------------------------------------------------------
+# 1. LOAD DATA
+# --------------------------------------------------------------------------
+def load_data():
+    try:
+        from ucimlrepo import fetch_ucirepo
+
+        dataset = fetch_ucirepo(id=544)
+        X = dataset.data.features
+        y = dataset.data.targets.squeeze()  # Series
+        return X, y
+    except Exception as e:
+        print(f"ucimlrepo fetch failed ({e}); falling back to local CSV.")
+        df = pd.read_csv("csv/ObesityDataSet_raw_and_data_sinthetic.csv")
+        y = df["NObeyesdad"]
+        X = df.drop(columns=["NObeyesdad"])
+        return X, y
+
+X, y = load_data()
+print("Feature matrix shape:", X.shape)
+print("Target distribution:\n", y.value_counts())
+
+# --------------------------------------------------------------------------
+# 2. PREPROCESSING
+# --------------------------------------------------------------------------
+# Identify column types.
+#   - binary_cols:  2-category columns -> single 0/1 column
+#   - ordinal_cols: genuinely ORDERED categories -> single integer column,
+#                   in their real-world order (no/Sometimes/Frequently/Always)
+#   - nominal_cols: unordered multi-category columns -> one-hot encoded,
+#                   with one category dropped to avoid the dummy trap
+#   - numeric_cols: continuous features -> standardized
+binary_cols = ["Gender", "family_history_with_overweight", "FAVC", "SMOKE", "SCC"]
+ordinal_cols = ["CAEC", "CALC"]                    # truly ordered categories
+nominal_cols = ["MTRANS"]                          # unordered, multi-category
+numeric_cols = ["Age", "Height", "Weight", "FCVC", "NCP", "CH2O", "FAF", "TUE"]
+
+# Keep only columns that actually exist (robust to minor naming differences)
+binary_cols = [c for c in binary_cols if c in X.columns]
+ordinal_cols = [c for c in ordinal_cols if c in X.columns]
+nominal_cols = [c for c in nominal_cols if c in X.columns]
+numeric_cols = [c for c in numeric_cols if c in X.columns]
+
+# Explicit category orders. For binary columns the order just fixes which
+# label maps to 0 vs 1; for CAEC/CALC the order is the real severity order.
+binary_categories = [["Female", "Male"], ["no", "yes"], ["no", "yes"], ["no", "yes"], ["no", "yes"]]
+binary_categories = binary_categories[: len(binary_cols)]
+
+ordinal_categories = [["no", "Sometimes", "Frequently", "Always"]] * len(ordinal_cols)
+
+# Encode target labels in their natural CLINICAL order (kept consistent with
+# LogisticRegression.py, even though XGBoost itself doesn't require an
+# ordered target — this keeps class_names/report ordering identical across
+# both scripts for easy side-by-side comparison).
+class_order = [
+    "Insufficient_Weight",
+    "Normal_Weight",
+    "Overweight_Level_I",
+    "Overweight_Level_II",
+    "Obesity_Type_I",
+    "Obesity_Type_II",
+    "Obesity_Type_III",
+]
+
+target_encoder = LabelEncoder()
+target_encoder.classes_ = np.array(class_order)
+y_encoded = target_encoder.transform(y)
+print("\nClasses (in ordinal order):", list(target_encoder.classes_))
+
+# ColumnTransformer: ordinal-encode binary/ordinal columns, one-hot encode
+# only the genuinely nominal column (MTRANS, drop="first"), and scale
+# numeric columns. Same preprocessing as LogisticRegression.py.
+preprocessor = ColumnTransformer(
+    transformers=[
+        ("bin", OrdinalEncoder(categories=binary_categories), binary_cols),
+        ("ord", OrdinalEncoder(categories=ordinal_categories), ordinal_cols),
+        (
+            "nom",
+            OneHotEncoder(handle_unknown="ignore", drop="first", sparse_output=False),
+            nominal_cols,
+        ),
+        ("num", StandardScaler(), numeric_cols),
+    ]
+)
+
+# Train/test split (stratified to preserve class balance)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y_encoded, test_size=0.2, random_state=RANDOM_STATE, stratify=y_encoded
+)
 # --------------------------------------------------------------------------
 # 3. FIT RANDOM FOREST WITH BEST HYPERPARAMETERS
 # --------------------------------------------------------------------------
@@ -116,7 +212,7 @@ print(classification_report(y_test, final_preds, target_names=target_encoder.cla
 
 # Ensure output directories exist
 os.makedirs("results/graphs", exist_ok=True)
-os.makedirs("saved_model", exist_ok=True)
+os.makedirs("pkl", exist_ok=True)
 
 # Generate Confusion Matrix
 cm = confusion_matrix(y_test, final_preds)
@@ -171,14 +267,7 @@ print(f"Saved sample decision tree to {tree_graph_path}")
 # --------------------------------------------------------------------------
 # 5. SAVE THE FINAL MODEL FOR GUI
 # --------------------------------------------------------------------------
-joblib.dump(best_model, "saved_model/random_forest_model.pkl")
-joblib.dump(target_encoder, "saved_model/rf_target_encoder.pkl")
-print("\nSaved trained pipeline to saved_model/random_forest_model.pkl")
-print("Saved target label encoder to saved_model/rf_target_encoder.pkl")
-
-# ==========================================================================
-# 6. RUNNING TIME
-# ==========================================================================
-end_time = time.time()
-elapsed_time = end_time - start_time
-print(f"\nTotal Execution Time: {elapsed_time:.2f} seconds")
+joblib.dump(best_model, "pkl/random_forest_model.pkl")
+joblib.dump(target_encoder, "pkl/rf_target_encoder.pkl")
+print("\nSaved trained pipeline to pkl/random_forest_model.pkl")
+print("Saved target label encoder to pkl/rf_target_encoder.pkl")
