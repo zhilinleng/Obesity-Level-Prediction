@@ -81,7 +81,7 @@ random_search = RandomizedSearchCV(
     cv=cv,
     random_state=42,
     n_jobs=-1,
-    verbose=0, # Set to 0 so tqdm progress bar displays cleanly
+    verbose=0, 
     return_train_score=True
 )
 
